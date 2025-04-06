@@ -57,11 +57,3 @@ class DB_Client():
         writer.close()
         await writer.wait_closed()
         return data
-
-
-if __name__ == "__main__":
-
-    #db_client = DB_Client()
-    
-    #x = db_client.select_features_targets(TICKERS.BTC_USDT, TIMEFRAMES.S)
-    pass

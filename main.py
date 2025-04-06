@@ -1,6 +1,5 @@
-from rnn.rnn_data import RNN_data
-from rnn.rnn import RNN
+from models.Learner import Learner
 
-rnn = RNN()
-rnn.train_rnn()
-rnn.plot_test()
+if __name__ == "main":
+    L = Learner()
+    L.train_model()
