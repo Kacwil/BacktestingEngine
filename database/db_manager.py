@@ -6,6 +6,7 @@ from database.feature_extractor import Feature_Extractor
 from utils.utils import timeframe_to_timeskip
 from utils.enums import TABLE_TYPE
 import asyncio
+import pandas as pd
 
 class DB_Manager():
     def __init__(self):
@@ -23,8 +24,13 @@ class DB_Manager():
         if start is None:
             start = int(datetime.datetime.now(datetime.timezone.utc).timestamp() * 1000) - (1000 * 60 * 60 * 24)
 
-        earliest = self.db.table_data[table]["earliest"]
-        latest = self.db.table_data[table]["latest"]
+        try:
+            earliest = self.db.table_data[table]["earliest"]
+            latest = self.db.table_data[table]["latest"]
+        except:
+            print("No table to fetch to...")
+            print("Creating new table")
+            self.db.create_ohlcv_table(table)
 
         async def fetch_and_insert(fetch_start, fetch_end):
             async for candles in self.fetcher.fetch_ohlcv_stream(ticker, timeframe, fetch_start, fetch_end):
@@ -61,19 +67,24 @@ class DB_Manager():
         print(f"Validating {table}")
 
         data = self.db.select_ohlcv_data(ticker, timeframe)
-        if not data:
+
+        if data.empty:
             print(f"No data found in {table}")
             return
 
         skip = timeframe_to_timeskip(timeframe)
-        expected_time = data[0][0]
+        time = data["timestamp"]
+        next_time = time.shift(-1)
 
-        for actual_time, *_ in data:
-            if actual_time != expected_time:
-                await self._handle_missing_gap(ticker, timeframe, expected_time, actual_time)
-                expected_time = actual_time + skip
-            else:
-                expected_time += skip
+        actual_deltas = next_time - time
+        gap_mask = actual_deltas > skip
+
+        gap_starts = time[gap_mask]
+        gap_ends = next_time[gap_mask]
+
+        for expected, actual in zip(gap_starts, gap_ends):
+            await self._handle_missing_gap(ticker, timeframe, expected + skip, actual)
+
         print("Data validation complete")
 
     async def _handle_missing_gap(self, ticker, timeframe, start, end):
@@ -94,9 +105,9 @@ class DB_Manager():
         if self.db.table_data.get(table_features):
             earliest = self.db.table_data[table_features]["earliest"]
             latest = self.db.table_data[table_features]["latest"]
-            data1 = self.db.select_ohlcv_data(ticker, timeframe, start, earliest)
+            data1 = self.db.select_ohlcv_data(ticker, timeframe, start, earliest + 3500*1000)
             data2 = self.db.select_ohlcv_data(ticker, timeframe, latest - 3500*1000, end)
-            data = data1 + data2
+            data = pd.concat([data1, data2], axis=0).drop_duplicates(subset=["timestamp"]).reset_index(drop=True)
         else:
             data = self.db.select_ohlcv_data(ticker, timeframe, start, end)
 

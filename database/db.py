@@ -1,4 +1,6 @@
 import sqlite3 as sql
+import pandas as pd
+from utils.dataclasses import Data
 
 class Database():
     def __init__(self):
@@ -33,6 +35,18 @@ class Database():
         self.table_data = table_data
         return None
 
+    def create_ohlcv_table(self, name):
+        self.cursor.execute(f'''
+            CREATE TABLE IF NOT EXISTS "{name}" (
+                timestamp DATETIME PRIMARY KEY,
+                open REAL,
+                high REAL,
+                low REAL,
+                close REAL,
+                volume REAL
+            )''')
+        return True
+
 
     def table_exists_in_db(self, name):
         if name in self.table_data:
@@ -43,15 +57,7 @@ class Database():
         table = self.table_name(ticker, timeframe)
         
         # 1: Create table if there is none
-        self.cursor.execute(f'''
-            CREATE TABLE IF NOT EXISTS "{table}" (
-                timestamp DATETIME PRIMARY KEY,
-                open REAL,
-                high REAL,
-                low REAL,
-                close REAL,
-                volume REAL
-            )''')
+        self.create_ohlcv_table(table)
 
         # 2: Insert data
         self.cursor.executemany(f'''
@@ -66,12 +72,17 @@ class Database():
         return self._select_data(table, start, end, limit, descending)
     
     def select_feature_target_data(self, ticker, timeframe, start=None, end=None, limit=None, descending=False):
-        features = self.table_name(ticker, timeframe, "_features")
-        targets = self.table_name(ticker, timeframe, "_targets")
-        return [self._select_data(features, start, end, limit, descending), self._select_data(targets, start, end, limit, descending)]
 
+        name_features = self.table_name(ticker, timeframe, "_features")
+        features = self._select_data(name_features, start, end, limit, descending)
+
+        name_targets = self.table_name(ticker, timeframe, "_targets")
+        targets = self._select_data(name_targets, start, end, limit, descending)
+
+        return Data(features, targets)
 
     def _select_data(self, table, start=None, end=None, limit=None, descending=False):
+        """ Fetches data from the database and returns a dataframe """
 
         if self.table_exists_in_db(table):
 
@@ -98,7 +109,10 @@ class Database():
                 params.append(limit)
 
             self.cursor.execute(query, params)
-            return self.cursor.fetchall()
+            rows = self.cursor.fetchall()
+            columns = [desc[0] for desc in self.cursor.description]
+
+            return pd.DataFrame(rows, columns=columns)
         
 
 

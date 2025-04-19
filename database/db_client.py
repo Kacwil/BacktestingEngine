@@ -7,6 +7,7 @@ import time
 
 from utils.enums import TICKERS, TIMEFRAMES, MSG_COMMANDS
 from utils.utils import create_msg
+from utils.dataclasses import Data
 
 
 class DB_Client():
@@ -27,7 +28,7 @@ class DB_Client():
         return asyncio.run(self.send_message(msg))
     
 
-    def select_features_targets(self, ticker, timeframe, start=None, end=None, limit=None, descending=False):
+    def select_features_targets(self, ticker, timeframe, start=None, end=None, limit=None, descending=False) -> Data:
         msg = create_msg(MSG_COMMANDS.SELECT_FEATURES_TARGETS, [ticker, timeframe, start, end, limit, descending])
         return asyncio.run(self.send_message(msg))
     

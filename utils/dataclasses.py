@@ -6,23 +6,25 @@ from typing import Generic, TypeVar, Iterator, Tuple
 T = TypeVar("T")
 
 @dataclass
-class Split(Generic[T]):
-    train: T
-    val: T
-    test: T
+class Data(Generic[T]):
+    """Stores some generic data, split into inputs and outputs for a NN"""
+    features: T
+    targets: T
 
     def items(self) -> Iterator[Tuple[str, T]]:
         for field in fields(self):
             yield field.name, getattr(self, field.name)
 
 @dataclass
-class DF_Data:
-    features: Split[pd.DataFrame]
-    targets: Split[pd.DataFrame]
+class DataSplit:
+    """Stores generic data objects in a train/val/test split"""
+    train: Data
+    val: Data
+    test: Data
 
-    def items(self) -> Iterator[Tuple[str, pd.DataFrame, pd.DataFrame]]:
-        for name in ["train", "val", "test"]:
-            yield name, getattr(self.features, name), getattr(self.targets, name)
+    def items(self) -> Iterator[Tuple[str, Data]]:
+        for field in fields(self):
+            yield field.name, getattr(self, field.name)
 
 @dataclass
 class Log:
@@ -44,17 +46,3 @@ class TrainingLog:
     train: Log = field(default_factory=Log)
     val: Log = field(default_factory=Log)
 
-
-@dataclass
-class Pipeline_Params:
-    init_n_samples: int = 7*24*4*15*60
-    end_n_samples: int = 50000
-    ticker: TICKERS = TICKERS.BTC_USDT
-    timeframe: TIMEFRAMES = TIMEFRAMES.S
-    train_ratio: float = 0.7
-    val_ratio: float = 0.15
-    sequential: bool = True
-    stride: int = 2
-    seq_length: int = 5
-    save: bool = False
-    is_classification: bool = False

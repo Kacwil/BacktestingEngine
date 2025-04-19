@@ -13,10 +13,10 @@ class Learner(BaseLearner):
         hp = HyperParams()
         pl = DataPipeline()
 
-        datasets = pl.datasets
+        datasets = pl.run_datapipeline()
         df_data = pl.df_data
 
-        self.model = V1(hp, datasets.train.n_features(), datasets.train.n_targets())
+        self.model = V1(hp)
 
         super().__init__("V1", datasets, df_data, hp)
     

@@ -4,13 +4,13 @@ import numpy as np
 import datetime
 
 class Feature_Extractor():
-    """Makes some pretty basic normalized features and targets from data"""
+    """Makes some basic normalized features and targets from data"""
     def __init__(self):
         pass
 
     def create_features_targets(self,data):
-        df_features = self._create_features(data)
-        df_targets = self._create_targets(data)
+        df_features = self._create_features(data.copy())
+        df_targets = self._create_targets(data.copy())
 
         #Crop
         common_ts = set(df_features["timestamp"]) & set(df_targets["timestamp"])
@@ -22,8 +22,7 @@ class Feature_Extractor():
 
         return df_features, df_targets
 
-    def _create_features(self, data):
-        df = pd.DataFrame(data, columns=["timestamp", "open", "high", "low", "close", "volume"])
+    def _create_features(self, df):
 
         windows = [10, 30, 90, 270, 810, 2430]
         normalization_window = 30
@@ -53,8 +52,7 @@ class Feature_Extractor():
         df = df.drop(["open", "high", "low"], axis=1)
         return df
 
-    def _create_targets(self, data):
-        df = pd.DataFrame(data, columns=["timestamp", "open", "high", "low", "close", "volume"])
+    def _create_targets(self, df):
         df = df.drop(["open", "high", "low", "volume"], axis=1)
         
         df["rets"] = df["close"].pct_change()
@@ -96,14 +94,9 @@ class Feature_Extractor():
     
     def normalize_minmax(self, series, window=30, epsilon=1e-8):
         rolling_min = series.rolling(window).min()
-        rolling_max = series.rolling(window).max()
-        
+        rolling_max = series.rolling(window).max()       
         norm = (series - rolling_min) / (rolling_max - rolling_min + epsilon)
-        
-        #Scale to [-1, 1]
-        norm = norm * 2 - 1
-        
-        return norm
+        return (norm - 0.5) * 2
 
 
 
