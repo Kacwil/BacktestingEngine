@@ -8,21 +8,28 @@ from models.HyperParameters import HyperParams
 
 def main():
     dbm = DB_Manager()
-    table_name = dbm.db.table_name("BTC/USDT", "1s")
-    raw_data = dbm.db.select_data(table_name, dbm.db_data.tables[table_name].last - 100000 * 1000)
+    tfs = {"1s", "1m", "3m", "5m", "15m", "30m", "1h", "4h", "12h", "1d"}
 
-    features, targets = extract_feature_targets(raw_data)
+    table_names = [dbm.db.table_name("BTC/USDT", tf) for tf in tfs]
 
-    params = Pipeline_Params(feature_seq_len=5, feature_seq_stride=1, target_seq_len=1, target_seq_stride=1)
-    datasets = datapipe(features.drop(["timestamp", "close"], axis=1), targets["class"], params)
+    raw_datas = {table_name:dbm.db.select_data(table_name) for table_name in table_names}
 
-    print(datasets.train.features.shape)
-    print(datasets.train.targets.shape)
+    datas = {table_name:extract_feature_targets(raw_data) for table_name, raw_data in raw_datas.items()}
 
-    hp = HyperParams(name="V1", n_features=40, n_targets=3)
-    lstm = LSTM(hp)
 
-    lstm.train_model(datasets)
+    for r in datas:
+        print(r)
+
+    params = Pipeline_Params(feature_seq_len=10, feature_seq_stride=1, target_seq_len=1, target_seq_stride=1)
+    datasets = {n:datapipe(data[0].drop(["timestamp", "close"], axis=1), data[1]["class"], params) for n,data in datas.items()}
+
+    hp = HyperParams(name="V1", n_features=33, n_targets=3)
+    for n, ds in datasets.items():
+        print("------")
+        print(n)
+        lstm = LSTM(hp)
+        lstm.train_model(ds)
+
 
 if __name__ == "__main__":
     main()

@@ -20,7 +20,7 @@ def extract_feature_targets(raw_data:pd.DataFrame) -> tuple[pd.DataFrame, pd.Dat
     return features, targets
 
 def _extract_features(df:pd.DataFrame) -> pd.DataFrame:
-    windows = [10, 30, 90, 270, 810]
+    windows = [10, 30, 90, 270]
     normalization_window = 5
 
     for w in windows:
@@ -42,6 +42,9 @@ def _extract_features(df:pd.DataFrame) -> pd.DataFrame:
     df["time_of_week_sin"] = np.sin(2 * np.pi * seconds_in_week / (86400 * 7))
     df["time_of_week_cos"] = np.cos(2 * np.pi * seconds_in_week / (86400 * 7))
 
+    df["close"] = normalize(df["close"], normalization_window)
+    df["volume"] = normalize(df["volume"], normalization_window)
+
     df = df.dropna()
     df = df.drop(["open", "high", "low"], axis=1)
     return df
@@ -50,11 +53,15 @@ def _extract_targets(raw_data:pd.DataFrame) -> pd.DataFrame:
     df = raw_data.drop(["open", "high", "low", "volume"], axis=1)
     th = 0.0000000001
     bins = [-np.inf, -th, th, np.inf]
-    df["class"] = pd.cut(df["close"].pct_change(), bins=bins, labels=[0,1,2])
+    try:
+        df["class"] = pd.qcut(df["close"].pct_change().shift(-1), q=3, labels=False)
+    except:
+        df["class"] = pd.cut(df["close"].pct_change().shift(-1), bins=bins, labels=[0,1,2])
+
     df = df.dropna()
     return df
 
-def normalize(series, window=30, epsilon=1e-8, min_std=1e-4):
+def normalize(series, window=5, epsilon=1e-8, min_std=1e-4):
 
     rolling_mean = series.rolling(window).mean()
     rolling_std = series.rolling(window).std()

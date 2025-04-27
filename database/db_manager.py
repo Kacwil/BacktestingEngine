@@ -7,10 +7,10 @@ import asyncio
 class DB_Manager():
     def __init__(self):
         self.db = Database()
-        self.db_data:DatabaseData = self.get_database_data()
+        self.db_data:DatabaseData = self.get_database_metadata()
         self.fetcher = BinanceFetcher()
 
-    def get_database_data(self) -> DatabaseData:
+    def get_database_metadata(self) -> DatabaseData:
         """Gets names, first/last timestamp and total/expected rows of each table"""
 
         tables = self.db.cursor.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()
@@ -40,28 +40,38 @@ class DB_Manager():
 
         return db_data
 
-    async def populate_data(self, ticker:str, timeframe:str, start:int=None, end:int=None):
+    async def populate_data(self, ticker:str, timeframe:str, max_rows = 100000):
         """
-        Fetch new data into the database
-        First from start -> earliest_ts, then from latest_ts -> end
+        Keep max_rows newest rows in the table.
+        Delete old rows. 
         """
 
-        table_name = self.db.table_name(ticker, timeframe)
-        time_skip = timeframe_to_timeskip(timeframe)
-        
-        self._validate_table_in_db_data(table_name)
-        start, end = self._default_input_times(start, end)
-        earliest = self.db_data.tables[table_name].first
-        latest = self.db_data.tables[table_name].last
-        total_added = 0
+        while True:
 
-        if start < earliest:
-            total_added += await self._fetch_and_insert(ticker, timeframe, start, earliest - time_skip)
+            table_name = self.db.table_name(ticker, timeframe)
+            time_skip = timeframe_to_timeskip(timeframe)
+            
+            self._validate_table_in_db_data(table_name)
+            latest = self.db_data.tables[table_name].last
 
-        if end > latest:
-            total_added += await self._fetch_and_insert(ticker, timeframe, latest + time_skip, end)
+            end = ts_now() - (max_rows * time_skip)
 
-        self.db_data = self.get_database_data()
+            await self._fetch_and_insert(ticker, timeframe, end, ts_now())
+            self.db_data = self.get_database_metadata()
+
+            latest = self.db_data.tables[table_name].last
+            end = latest - (max_rows * time_skip)
+
+            self.db.delete_data(table_name, end)
+
+            self.db_data = self.get_database_metadata()
+
+            print(f"[DBM] Populated table {ticker}_{timeframe}...")
+            print(f"{self.db_data.tables[table_name].total_rows}/{max_rows} ")
+
+            time.sleep(0.05)
+
+            await asyncio.sleep(0)
 
         return None
     
@@ -74,12 +84,11 @@ class DB_Manager():
         return None
 
     async def _fetch_and_insert(self, ticker, timeframe, fetch_start, fetch_end):
-        counter = 0
+        if fetch_start < 0:
+            fetch_start = 0
         async for candles in self.fetcher.fetch_ohlcv_stream(ticker, timeframe, fetch_start, fetch_end):
             self.db.insert_data(ticker, timeframe, candles)
-            print(f"[DB] Inserted {len(candles)} rows → {ticker} [{timeframe}] | {fetch_start} → {fetch_end}")
-            counter += len(candles)
-        return counter
+        return None
 
 
     async def validate_table_data(self, ticker, timeframe):
@@ -111,16 +120,15 @@ class DB_Manager():
         self.db_data = self.get_database_data()
         return None
 
+async def create_populator_tasks():
+    tfs = {"1s", "1m", "3m", "5m", "15m", "30m", "1h", "4h", "12h", "1d"}
+    tasks = [asyncio.create_task(dbm.populate_data("BTC/USDT", tf)) for tf in tfs]
+    await asyncio.gather(*tasks)
+
 
 if __name__ == "__main__":
     dbm = DB_Manager()
 
     import time
 
-    start = time.perf_counter()
-    dbm.get_database_data()
-    end = time.perf_counter()
-    print(end-start)
-    print(dbm.db_data)
-
-    asyncio.run(dbm.validate_table_data("BTC/USDT", "1s"))
+    asyncio.run(create_populator_tasks())

@@ -18,9 +18,8 @@ class Database():
             )''')
         return None
     
-    def insert_data(self, ticker, timeframe, data):
+    def insert_data(self, ticker, timeframe, data) -> None:
         table_name = self.table_name(ticker, timeframe)
-        print(table_name, ticker, timeframe)
         
         self.create_ohlcv_table(table_name)
 
@@ -36,12 +35,23 @@ class Database():
 
         query = f'SELECT * FROM "{table_name}" WHERE timestamp >= ? AND timestamp <= ?'
         self.cursor.execute(query, (start, end))
+
         rows = self.cursor.fetchall()
         columns = [desc[0] for desc in self.cursor.description]
 
         return pd.DataFrame(rows, columns=columns)
+    
+    def delete_data(self, table_name, end, start=0) -> None:
+        query = f'DELETE FROM "{table_name}" WHERE timestamp >= ? AND timestamp <= ?'
 
-    def table_name(self, ticker, timeframe):
+        try:
+            self.cursor.execute(query, (start, end))
+        except Exception as e:
+            raise Exception(f"Failed to delete data between {start} and {end}: {e}")
+        
+        return None
+
+    def table_name(self, ticker, timeframe) -> str:
         ticker = str.replace(ticker, "/", "_")
         return ticker + "_" + timeframe
     

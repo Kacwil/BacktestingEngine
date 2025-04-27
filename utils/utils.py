@@ -5,14 +5,19 @@ import json
 def timeframe_to_timeskip(timeframe:str):
     """Takes in a timeframe string looking like "15m" / "1s" etc and returns the miliseconds between each step """
     if timeframe == "1s": return 1000
+    elif timeframe == "5s": return 1000 * 5
+    elif timeframe == "15s": return 1000 * 15
+    elif timeframe == "30s": return 1000 * 30
     elif timeframe == "1m": return 1000 * 60
     elif timeframe == "2m": return 1000 * 60 * 2
     elif timeframe == "3m": return 1000 * 60 * 3
     elif timeframe == "5m": return 1000 * 60 * 5
     elif timeframe == "15m": return 1000 * 60 * 15
+    elif timeframe == "30m": return 1000 * 60 * 30
     elif timeframe == "1h": return 1000 * 60 * 60
+    elif timeframe == "4h": return 1000 * 60 * 60 * 4
+    elif timeframe == "12h": return 1000 * 60 * 60 * 12
     elif timeframe == "1d": return 1000 * 60 * 60 * 24
-    elif timeframe == "1w": return 1000 * 60 * 60 * 24 * 7
     else: raise ValueError(f"Unsupported timeframe: {timeframe}")
 
 def seconds_since_newday(t):
