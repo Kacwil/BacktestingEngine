@@ -30,11 +30,4 @@ class MSG_COMMANDS(str, Enum):
     def __str__(self):
         return self.value
     
-class TABLE_TYPE(str, Enum):
-    OHLCV = ""
-    FEATURES = "_features"
-    TARGETS = "_targets"
-
-    def __str__(self):
-        return self.value
     

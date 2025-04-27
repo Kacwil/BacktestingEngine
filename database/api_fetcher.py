@@ -1,9 +1,11 @@
 import ccxt
 import asyncio
-
 from utils.utils import timeframe_to_timeskip
 
 class BinanceFetcher:
+    """
+    Fetches the ohlcv data for ticker-timeframe from timestamps start to end.
+    """
 
     def __init__(self):
         self.exchange = ccxt.binance()

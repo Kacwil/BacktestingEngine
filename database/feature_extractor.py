@@ -1,109 +1,83 @@
 import pandas as pd
 import talib as ta
 import numpy as np
-import datetime
 
-class Feature_Extractor():
-    """Makes some basic normalized features and targets from data"""
-    def __init__(self):
-        pass
+def extract_feature_targets(raw_data:pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """
+    Extracts features and targets from ohlcv data
+    """
 
-    def create_features_targets(self,data):
-        df_features = self._create_features(data.copy())
-        df_targets = self._create_targets(data.copy())
+    features = _extract_features(raw_data.copy())
+    targets = _extract_targets(raw_data.copy())
 
-        #Crop
-        common_ts = set(df_features["timestamp"]) & set(df_targets["timestamp"])
-        df_features = df_features[df_features["timestamp"].isin(common_ts)]
-        df_targets = df_targets[df_targets["timestamp"].isin(common_ts)]
+    common_ts = set(features["timestamp"]) & set(targets["timestamp"])
+    features = features[features["timestamp"].isin(common_ts)]
+    targets = targets[targets["timestamp"].isin(common_ts)]
 
-        df_features = df_features.sort_values("timestamp").reset_index(drop=True)
-        df_targets = df_targets.sort_values("timestamp").reset_index(drop=True)
+    features = features.sort_values("timestamp").reset_index(drop=True)
+    targets = targets.sort_values("timestamp").reset_index(drop=True)
 
-        return df_features, df_targets
+    return features, targets
 
-    def _create_features(self, df):
+def _extract_features(df:pd.DataFrame) -> pd.DataFrame:
+    windows = [10, 30, 90, 270, 810]
+    normalization_window = 5
 
-        windows = [10, 30, 90, 270, 810, 2430]
-        normalization_window = 30
+    for w in windows:
+        df[f"ema{w}"] = normalize(ta.EMA(df["close"], w), normalization_window)
+        df[f"rsi{w}"] = normalize(ta.RSI(df["close"], w), normalization_window)
+        df[f"atr{w}"] = normalize(ta.ATR(df["high"], df["low"],df["close"], w), normalization_window)
+        df[f"mfi{w}"] = normalize(ta.MFI(df["high"], df["low"], df["close"], df["volume"], w), normalization_window)
 
-        for w in windows:
-            df[f"ema{w}"] = self.normalize(ta.EMA(df["close"], w), normalization_window)
-            df[f"rsi{w}"] = self.normalize(ta.RSI(df["close"], w), normalization_window)
-            df[f"atr{w}"] = self.normalize(ta.ATR(df["high"], df["low"],df["close"], w), normalization_window)
-            df[f"mfi{w}"] = self.normalize(ta.MFI(df["high"], df["low"], df["close"], df["volume"], w), normalization_window)
+        macd = ta.MACD(df["close"], int(1.5*w), int(3*w), w)
+        df[f"macd0_{w}"] = normalize(macd[0], normalization_window)
+        df[f"macd1_{w}"] = normalize(macd[1], normalization_window)
+        df[f"macd2_{w}"] = normalize(macd[2], normalization_window)
 
-            if w == 2430: break
+    timestamp_dt = pd.to_datetime(df["timestamp"], unit="ms", utc=True)
+    seconds_in_day = timestamp_dt.dt.hour * 3600 + timestamp_dt.dt.minute * 60 + timestamp_dt.dt.second
+    seconds_in_week = timestamp_dt.dt.weekday * 86400 + seconds_in_day
+    df["time_of_day_sin"] = np.sin(2 * np.pi * seconds_in_day / 86400)
+    df["time_of_day_cos"] = np.cos(2 * np.pi * seconds_in_day / 86400)
+    df["time_of_week_sin"] = np.sin(2 * np.pi * seconds_in_week / (86400 * 7))
+    df["time_of_week_cos"] = np.cos(2 * np.pi * seconds_in_week / (86400 * 7))
 
-            macd = ta.MACD(df["close"], int(1.5*w), int(3*w), w)
-            df[f"macd0_{w}"] = self.normalize(macd[0], normalization_window)
-            df[f"macd1_{w}"] = self.normalize(macd[1], normalization_window)
-            df[f"macd2_{w}"] = self.normalize(macd[2], normalization_window)
+    df = df.dropna()
+    df = df.drop(["open", "high", "low"], axis=1)
+    return df
 
-        timestamp_dt = pd.to_datetime(df["timestamp"], unit="ms", utc=True)
-        seconds_in_day = timestamp_dt.dt.hour * 3600 + timestamp_dt.dt.minute * 60 + timestamp_dt.dt.second
-        seconds_in_week = timestamp_dt.dt.weekday * 86400 + seconds_in_day
-        df["time_of_day_sin"] = np.sin(2 * np.pi * seconds_in_day / 86400)
-        df["time_of_day_cos"] = np.cos(2 * np.pi * seconds_in_day / 86400)
-        df["time_of_week_sin"] = np.sin(2 * np.pi * seconds_in_week / (86400 * 7))
-        df["time_of_week_cos"] = np.cos(2 * np.pi * seconds_in_week / (86400 * 7))
+def _extract_targets(raw_data:pd.DataFrame) -> pd.DataFrame:
+    df = raw_data.drop(["open", "high", "low", "volume"], axis=1)
+    th = 0.0000000001
+    bins = [-np.inf, -th, th, np.inf]
+    df["class"] = pd.cut(df["close"].pct_change(), bins=bins, labels=[0,1,2])
+    df = df.dropna()
+    return df
 
-        df = df.dropna()
-        df = df.drop(["open", "high", "low"], axis=1)
-        return df
+def normalize(series, window=30, epsilon=1e-8, min_std=1e-4):
 
-    def _create_targets(self, df):
-        df = df.drop(["open", "high", "low", "volume"], axis=1)
-        
-        df["rets"] = df["close"].pct_change()
+    rolling_mean = series.rolling(window).mean()
+    rolling_std = series.rolling(window).std()
 
-        #Trick to vectorize without using np.prod
-        df["log_rets"] = np.log(df["rets"] + 1)
+    norm = (series - rolling_mean) / (rolling_std + epsilon)
 
-        df["cum_rets"] = (np.exp(df["log_rets"].rolling(window=60).sum().shift(-59)) - 1)
-        df["n_cum_rets"] = self.normalize(df["cum_rets"], 15)
-        df["ewm_cum_rets"] = self.normalize_ewm(df["cum_rets"], 15)
-        df["minmax_cum_rets"] = self.normalize_minmax(df["cum_rets"], 15)
+    #Low variance zones
+    norm_rolling_mean = norm.rolling(5).mean()
+    norm = norm.where(rolling_std > min_std, norm_rolling_mean)
 
-        df = df.dropna()
-        return df
+    return norm
 
-    def normalize(self, series, window=30, epsilon=1e-8, min_std=1e-4):
-        rolling_mean = series.rolling(window).mean()
-        rolling_std = series.rolling(window).std()
+if __name__ == "__main__":
+    from database.db_manager import DB_Manager
+    import time
+    dbm = DB_Manager()
+    s = time.perf_counter()
 
-        norm = (series - rolling_mean) / (rolling_std + epsilon)
+    table_name = dbm.db.table_name("BTC/USDT", "1s")
+    raw_data = dbm.db.select_data(table_name, dbm.db_data.tables[table_name].last - 100000 * 1000)
 
-        # Fallback for low variance zones
-        norm_rolling_mean = norm.rolling(5).mean()
-        norm = norm.where(rolling_std > min_std, norm_rolling_mean)
+    x, y = extract_feature_targets(raw_data)
 
-        return norm
+    print(time.perf_counter() - s)
+    print(x.columns)
 
-    def normalize_ewm(self, series, span=30, epsilon=1e-8, min_std=1e-4):
-        rolling_mean = series.ewm(span=span).mean()
-        rolling_std = series.ewm(span=span).std()
-
-        norm = (series - rolling_mean) / (rolling_std + epsilon)
-
-        # Fallback for low variance zones
-        fallback = norm.ewm(span=5).mean()
-        norm = norm.where(rolling_std > min_std, fallback)
-
-        return norm
-    
-    def normalize_minmax(self, series, window=30, epsilon=1e-8):
-        rolling_min = series.rolling(window).min()
-        rolling_max = series.rolling(window).max()       
-        norm = (series - rolling_min) / (rolling_max - rolling_min + epsilon)
-        return (norm - 0.5) * 2
-
-
-
-
-#dbm = DB_Manager()
-#data = dbm.db.select_ohlcv_data("BTC/USDT", "1s")
-
-#fe = Feature_Extractor()
-#df = fe.create_targets(data)
-#df = fe.create_features(df)

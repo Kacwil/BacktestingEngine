@@ -1,7 +1,6 @@
 import asyncio
 import struct
 import pickle
-import datetime
 
 from .db_manager import DB_Manager
 from utils.enums import MSG_COMMANDS
@@ -20,7 +19,7 @@ class DB_Server():
         print(f"Listening on {self.address}:{self.port}")
 
         asyncio.create_task(self.fetch_data())
-        asyncio.create_task(self.extract_features())
+        asyncio.create_task(self.validate_data())
 
         async with server:
             await server.serve_forever()
@@ -47,12 +46,6 @@ class DB_Server():
                 data = pickle.dumps(result)
                 await self.send_data(data, writer)
 
-            elif cmd == MSG_COMMANDS.SELECT_FEATURES_TARGETS:
-                result = self.db_manager.db.select_feature_target_data(*args)
-                data = pickle.dumps(result)
-                await self.send_data(data, writer)          
-
-            
         except Exception as e:
             print("Error:", e)
 
@@ -68,24 +61,23 @@ class DB_Server():
 
     async def fetch_data(self):
         while True:
-            print(f"[Server] fetching data...")
             try:
                 await self.db_manager.populate_data("BTC/USDT", "1s")
             except Exception as e:
-                print(f"[Server] Error: {e}")
+                print(f"[Server] Error while populating: {e}")
             await asyncio.sleep(0.01)
 
-
-    async def extract_features(self):
+    async def validate_data(self):
         while True:
-            print(f"[Server] extracting features...")
-            now = int(datetime.datetime.now(datetime.timezone.utc).timestamp() * 1000)
+            print("[Server] Validating data...")
             try:
-                await self.db_manager.extract_features("BTC/USDT", "1s", start = now - 1000 * 100000)
+                await self.db_manager.validate_table_data("BTC/USDT", "1s")
+                print("[Server] Validating Complete.")
+                await asyncio.sleep(10)
             except Exception as e:
-                print(f"[Server] Error: {e}")
-            await asyncio.sleep(10)
+                print(f"[Server] Error while validating: {e}")
+                await asyncio.sleep(1)
 
 
 if __name__ == "__main__":
-    db_server = DB_Server()
+    ds = DB_Server()

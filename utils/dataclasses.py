@@ -1,13 +1,11 @@
 from dataclasses import dataclass, field, fields
-import pandas as pd
-from utils.enums import TICKERS, TIMEFRAMES
 from typing import Generic, TypeVar, Iterator, Tuple
 
 T = TypeVar("T")
 
 @dataclass
 class Data(Generic[T]):
-    """Stores some generic data, split into inputs and outputs for a NN"""
+    """Stores some generic data, split into features/targets for a NN"""
     features: T
     targets: T
 
@@ -17,7 +15,12 @@ class Data(Generic[T]):
 
 @dataclass
 class DataSplit:
-    """Stores generic data objects in a train/val/test split"""
+    """
+    Stores generic Data objects in a train/val/test split.
+
+    Data objects store features and targets in dataframes/tensors/datasets.
+    """
+
     train: Data
     val: Data
     test: Data
@@ -45,4 +48,21 @@ class Log:
 class TrainingLog:
     train: Log = field(default_factory=Log)
     val: Log = field(default_factory=Log)
+
+
+@dataclass
+class TableData:
+    name:str
+    first:int = 1e100
+    last:int = 0
+    total_rows:int = 0
+    expected_rows:int = 0
+
+@dataclass
+class DatabaseData:
+    tables: dict[str, TableData] = field(default_factory=dict)
+
+    def items(self) -> Iterator[Tuple[str, int, int, int, int]]:
+        for name, data in self.tables:
+            yield name, data.first, data.last, data.total_rows, data.expected_rows
 

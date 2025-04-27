@@ -2,12 +2,14 @@ from dataclasses import dataclass
 
 @dataclass
 class HyperParams:
+    name:str
     batch_size: int = 100
     epochs: int = 8
     lr: float = 0.001
     dropout: float = 0.30
     weight_decay: float = 1e-4
     leaky: float = 0.01 
+    shuffle_training: bool = True
 
     n_features: int = 10
     n_targets: int = 5

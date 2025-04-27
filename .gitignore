@@ -1,5 +1,6 @@
 .env
 .env/
+venv/
 __pycache__/
 *.pyc
 .vscode/
@@ -9,3 +10,4 @@ datasets/
 *.pth
 models/TradingAgent.py
 database/stockprices.db
+torch_saves/
