@@ -5,7 +5,7 @@ from utils.dataclasses import Data
 class CustomDataset(Dataset):
     def __init__(self, data:Data):
         "Takes in a tensor-Data object and creates a torch based dataset. The input tensors might be 2d or 3d.(sequences)"
-        
+
         self.features:torch.tensor = data.features
         self.targets:torch.tensor = data.targets
 

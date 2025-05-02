@@ -11,3 +11,5 @@ datasets/
 models/TradingAgent.py
 database/stockprices.db
 torch_saves/
+
+test/

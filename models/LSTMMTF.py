@@ -4,22 +4,29 @@ import torch.nn as nn
 import torch
 from sklearn.metrics import confusion_matrix
 
-class LSTMCore(nn.Module):
+class LSTMMTFCore(nn.Module):
 
     def __init__(self, hp):
         super().__init__()
         self.hp = hp
-        self.encoder, self.head = self.build_model()
+        self.encoder1, self.encoder2, self.encoder3, self.encoder, self.head = self.build_model()
 
     def forward(self, x):
-        encoded, _ = self.encoder(x)
-        last = encoded[:, -1, :]
-        return self.head(last)
+        encoded1, _ = self.encoder1(x[:,:,:10])
+        encoded2, _ = self.encoder2(x[:,:,10:20])
+        encoded3, _ = self.encoder3(x[:,:,20:])
+
+        encoded = torch.cat((encoded1, encoded2, encoded3), dim=-1)
+        encoded, _ = self.encoder(encoded)
+        return self.head(encoded[:, -1, :])
 
     def build_model(self):
-        encoder = nn.LSTM(input_size=self.hp.n_features, hidden_size=self.hp.LSTM_hidden, num_layers=self.hp.LSTM_layers, batch_first=True)
+        encoder1 = nn.LSTM(input_size=self.hp.n_features, hidden_size=self.hp.LSTM_hidden, num_layers=self.hp.LSTM_layers, batch_first=True)
+        encoder2 = nn.LSTM(input_size=self.hp.n_features, hidden_size=self.hp.LSTM_hidden, num_layers=self.hp.LSTM_layers, batch_first=True)
+        encoder3 = nn.LSTM(input_size=self.hp.n_features, hidden_size=self.hp.LSTM_hidden, num_layers=self.hp.LSTM_layers, batch_first=True)
+        encoder = nn.LSTM(input_size=self.hp.LSTM_hidden * 3, hidden_size=self.hp.LSTM_hidden, num_layers=self.hp.LSTM_layers, batch_first=True)
         head = self.build_head()
-        return encoder, head
+        return encoder1, encoder2, encoder3, encoder, head
 
     def build_head(self):
         head = nn.Sequential(
@@ -29,27 +36,25 @@ class LSTMCore(nn.Module):
             nn.Linear(128, 64),
             nn.LeakyReLU(self.hp.leaky),
             nn.Dropout(self.hp.dropout),
-            nn.Linear(64, 32),
-            nn.LeakyReLU(self.hp.leaky),
-            nn.Dropout(self.hp.dropout),
-            nn.Linear(32, self.hp.n_targets)
+            nn.Linear(64, self.hp.n_targets)
         )
         return head
 
-class LSTM(Model_Base):
+class LSTMMTF(Model_Base):
     def __init__(self, hp):
         super().__init__(hp)
 
     def _build_model(self):
-        return LSTMCore(self.hp)
+        return LSTMMTFCore(self.hp)
 
     def _build_optimizer(self):
         return torch.optim.Adam(self.model.parameters(), lr=self.hp.lr, weight_decay=self.hp.weight_decay)
     
     def _loss_fn(self, predictions, targets):
-        class_weights = torch.tensor([0.9, 1.0, 1.0, 1.0, 0.9]).to(self.device)
+        targets = targets.squeeze()
+        class_weights = torch.tensor([0.95, 1.0, 1.0, 1.0, 0.95]).to(self.device)
         targets = targets.long()
-        return nn.functional.cross_entropy(predictions, targets.squeeze(1), weight=class_weights)
+        return nn.functional.cross_entropy(predictions, targets, weight=class_weights)
     
     def debug_epoch(self):
 
@@ -102,3 +107,23 @@ class LSTM(Model_Base):
         plt.tight_layout() 
         plt.show()
     
+    def test_model(self, ds):
+        self.load_model()
+
+        dataloaders = self._create_dataloaders(ds)
+        self._run_epoch(dataloaders.test, "test")
+
+        print("Running Testset")
+
+        predictions = torch.argmax(torch.cat(self.log.test.predictions, dim=-1), axis=1)
+        targets = torch.squeeze(torch.cat(self.log.test.target_batches, dim=-1))
+
+        cm = confusion_matrix(targets.cpu(), predictions.cpu())
+        accuracy = (predictions == targets).float().mean().item()
+
+        # Print confusion matrix
+        print("\nConfusion Matrix:")
+        print(cm)
+
+        print("\nAccuracy:")
+        print(accuracy)

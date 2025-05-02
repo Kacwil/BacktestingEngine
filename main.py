@@ -1,9 +1,8 @@
 from database.db_manager import DB_Manager
 from database.feature_extractor import extract_feature_targets
 from datapipe.datapipe import datapipe
-from datapipe.PipelineParameters import Pipeline_Params
+from utils.HyperParameters import HyperParams
 from models.LSTM import LSTM
-from models.HyperParameters import HyperParams
 
 
 def main():
@@ -16,19 +15,18 @@ def main():
 
     datas = {table_name:extract_feature_targets(raw_data) for table_name, raw_data in raw_datas.items()}
 
-
-    for r in datas:
-        print(r)
-
-    params = Pipeline_Params(feature_seq_len=10, feature_seq_stride=1, target_seq_len=1, target_seq_stride=1)
+    params = HyperParams(feature_seq_len=10, feature_seq_stride=1, target_seq_len=1, target_seq_stride=1)
     datasets = {n:datapipe(data[0].drop(["timestamp", "close"], axis=1), data[1]["class"], params) for n,data in datas.items()}
 
-    hp = HyperParams(name="V1", n_features=33, n_targets=3)
+    models = {}
     for n, ds in datasets.items():
-        print("------")
-        print(n)
+        hp = HyperParams(name=n, n_features=33, n_targets=3, epochs=50)
         lstm = LSTM(hp)
         lstm.train_model(ds)
+        models[n] = lstm
+
+    for n, model in models.items():
+        print(n, model.training_log.val.avg_loss, model.training_log.val.best_epoch)
 
 
 if __name__ == "__main__":

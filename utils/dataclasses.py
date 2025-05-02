@@ -48,6 +48,7 @@ class Log:
 class TrainingLog:
     train: Log = field(default_factory=Log)
     val: Log = field(default_factory=Log)
+    test: Log = field(default_factory=Log)
 
 
 @dataclass

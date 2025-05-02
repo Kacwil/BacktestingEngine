@@ -2,6 +2,22 @@ import pandas as pd
 import talib as ta
 import numpy as np
 
+def main():
+    from database.db_manager import DB_Manager
+    import time
+    dbm = DB_Manager()
+    s = time.perf_counter()
+
+    table_name = dbm.db.table_name("BTC/USDT", "5m")
+    raw_data = dbm.db.select_data(table_name, dbm.db_data.tables[table_name].last - 100000 * 1000)
+
+    x, y = extract_feature_targets(raw_data)
+
+    print(y)
+
+    print(time.perf_counter() - s)
+    print(x.columns)
+
 def extract_feature_targets(raw_data:pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
     """
     Extracts features and targets from ohlcv data
@@ -50,13 +66,15 @@ def _extract_features(df:pd.DataFrame) -> pd.DataFrame:
     return df
 
 def _extract_targets(raw_data:pd.DataFrame) -> pd.DataFrame:
+
     df = raw_data.drop(["open", "high", "low", "volume"], axis=1)
     th = 0.0000000001
     bins = [-np.inf, -th, th, np.inf]
     try:
-        df["class"] = pd.qcut(df["close"].pct_change().shift(-1), q=3, labels=False)
+        df["class"] = pd.cut(df["close"].pct_change().shift(-5), q=3, labels=False)
     except:
-        df["class"] = pd.cut(df["close"].pct_change().shift(-1), bins=bins, labels=[0,1,2])
+        df["class"] = pd.cut(df["close"].pct_change().shift(-5), bins=bins, labels=[0,1,2])
+
 
     df = df.dropna()
     return df
@@ -75,16 +93,6 @@ def normalize(series, window=5, epsilon=1e-8, min_std=1e-4):
     return norm
 
 if __name__ == "__main__":
-    from database.db_manager import DB_Manager
-    import time
-    dbm = DB_Manager()
-    s = time.perf_counter()
+    main()
 
-    table_name = dbm.db.table_name("BTC/USDT", "1s")
-    raw_data = dbm.db.select_data(table_name, dbm.db_data.tables[table_name].last - 100000 * 1000)
-
-    x, y = extract_feature_targets(raw_data)
-
-    print(time.perf_counter() - s)
-    print(x.columns)
 

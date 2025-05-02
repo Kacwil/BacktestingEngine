@@ -1,24 +1,30 @@
 from utils.dataclasses import Data, DataSplit
-from datapipe.PipelineParameters import Pipeline_Params
+from utils.HyperParameters import HyperParams
 from datapipe.CustomDataset import CustomDataset
 import torch
 import pandas as pd
+import copy
 
-def datapipe(features:pd.DataFrame, targets:pd.DataFrame, params:Pipeline_Params) -> DataSplit:
+def datapipe(features:pd.DataFrame, targets:pd.DataFrame, params:HyperParams):
     """
     :Inputs: Dataframes of features and targets
-    :Outputs: DataSplit of CustomDatasets. Datasplit stores train/validation/test split. CustomDataset is torch based datasets.
+    :Outputs: data_df, data_df_split, data_tensor_split, data_seq_tensor_split, datasets
     """
 
     data_df = Data(features, targets)
     data_df_split = split_data(data_df, params)
-    data_tensor_split = convert_split_to_tensors(data_df_split, params)
+    data_df_split_norm = normalize_datasplit(data_df_split, params)
+    data_tensor_split = convert_split_to_tensors(data_df_split_norm, params)
     data_seq_tensor_split = build_sequences(data_tensor_split, params)
-    datasets = make_datasets(data_seq_tensor_split)
 
-    return datasets
+    if params.sequential:
+        datasets = make_datasets(data_seq_tensor_split)
+    else:
+        datasets = make_datasets(data_tensor_split)
 
-def split_data(data:Data[pd.DataFrame], params:Pipeline_Params) -> DataSplit:
+    return data_df, data_df_split, data_tensor_split, data_df_split_norm, data_seq_tensor_split, datasets
+
+def split_data(data:Data[pd.DataFrame], params:HyperParams) -> DataSplit:
     """Splits a df-data object into df-datasplit object"""
 
     n = len(data.features)
@@ -32,7 +38,24 @@ def split_data(data:Data[pd.DataFrame], params:Pipeline_Params) -> DataSplit:
 
     return DataSplit(train, val, test)
 
-def convert_split_to_tensors(ds:DataSplit, params:Pipeline_Params) -> DataSplit:
+def normalize_datasplit(datasplit:DataSplit, params):
+
+    ds = copy.deepcopy(datasplit)
+
+    for name, data in ds.items():
+        for name, df in data.items():
+            print(name)
+            if name == "targets" and params.disable_normalize_targets:
+                continue
+            try:
+                for col in df.columns:
+                    df[col] = (df[col] - df[col].mean()) / df[col].std().clip(1e-3)
+            except:
+                df = (df - df.mean()) / df.std().clip(1e-3)
+
+    return ds
+
+def convert_split_to_tensors(ds:DataSplit, params:HyperParams) -> DataSplit:
     """ Converts DataSplit of dataframes into Datasplit of tensors """
     result = []
     for _, data in ds.items():
@@ -42,8 +65,10 @@ def convert_split_to_tensors(ds:DataSplit, params:Pipeline_Params) -> DataSplit:
 
     return DataSplit(*result)
 
-def build_sequences(ds:DataSplit, params:Pipeline_Params) -> DataSplit:
+def build_sequences(datasplit:DataSplit, params:HyperParams) -> DataSplit:
     """ Convert the 2d tensors in datasplit into 3d sequentiall tensors. """
+
+    ds = copy.deepcopy(datasplit)
 
     start = (params.feature_seq_len - 1) * params.feature_seq_stride
 
@@ -70,8 +95,6 @@ def build_sequences(ds:DataSplit, params:Pipeline_Params) -> DataSplit:
         data.targets = _create_t_seq(data.targets, t_seq_len, t_seq_stride, start, end)
     return ds
 
-
-
 def make_datasets(ds:DataSplit):
     """Create CustomDatasets from Datasplit"""
     datasets = []
@@ -79,6 +102,7 @@ def make_datasets(ds:DataSplit):
         datasets.append(CustomDataset(data))
 
     return DataSplit(*datasets)
+
 
 if __name__ == "__main__":
     from database.db_manager import DB_Manager
@@ -89,7 +113,7 @@ if __name__ == "__main__":
     table_name = dbm.db.table_name("BTC/USDT", "1s")
     raw_data = dbm.db.select_data(table_name, dbm.db_data.tables[table_name].last - 100000 * 1000)
 
-    params = Pipeline_Params()
+    params = HyperParams()
     datasets = datapipe(raw_data, raw_data, params)
 
     print(time.perf_counter() - s)
